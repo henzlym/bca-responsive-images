@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name:       Bca Responsive Images
- * Description:       Example block written with ESNext standard and JSX support – build step required.
+ * Plugin Name:       Blank Canvas - Responsive Images
+ * Description:       Allow loading of post thumbnail sizes for mobile, tablet, and desktop devices.
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Version:           0.1.0
