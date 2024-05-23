@@ -19,6 +19,8 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+include __DIR__  . '/includes/settings-api.php';
+include __DIR__  . '/includes/settings.php';
 /**
  * Filters the image sources for responsive images.
  *
@@ -69,8 +71,22 @@ function bca_responsive_images($html, $post_id, $post_thumbnail_id, $size, $attr
 	global $post;
 
 	if (is_admin()) return $html;
-	if (get_post_type() !== 'post') return $html;
-	if (!(!is_single() || !is_category())) return $html;
+
+	$defaults = ['content_types' => array('post'), 'in_content' => 0];
+	$options = get_option( 'bca_responsive_images_basics' );
+	$options = array_merge($defaults, !is_array($options) ? array() : $options);
+
+	if (!is_singular( $options['content_types'] )) return $html;
+
+	$html = bca_responsive_images_html( $html, $post_thumbnail_id, $size, $attr);
+
+	return $html;
+}
+add_filter('post_thumbnail_html', 'bca_responsive_images', 10, 5);
+
+function bca_responsive_images_html( $html, $attachment_id, $size, $attr)
+{
+	global $post;
 
 	$sizes = !isset($attr['sizes']) ? false : $attr['sizes'];
 	$sizes = apply_filters('bca_responsive_images_sizes', $sizes, $size);
@@ -81,9 +97,9 @@ function bca_responsive_images($html, $post_id, $post_thumbnail_id, $size, $attr
 
 	$sizes = explode(',', $sizes);
 
-	if (!isset($post->thumbnails) || empty($post->thumbnails) || !isset($post->thumbnails[$post_thumbnail_id])) return $html;
+	if (!isset($post->thumbnails) || empty($post->thumbnails) || !isset($post->thumbnails[$attachment_id])) return $html;
 
-	$post_thumbnail = $post->thumbnails[$post_thumbnail_id];
+	$post_thumbnail = $post->thumbnails[$attachment_id];
 	$sources = [];
 
 	foreach ($sizes as $key => $size) {
@@ -104,8 +120,6 @@ function bca_responsive_images($html, $post_id, $post_thumbnail_id, $size, $attr
 
 	return $html;
 }
-add_filter('post_thumbnail_html', 'bca_responsive_images', 10, 5);
-
 /**
  * Filters the threshold for how many of the first content media elements to not lazy-load.
  *
@@ -133,9 +147,10 @@ add_filter('wp_omit_loading_attr_threshold', 'bca_omit_loading_attr_threshold');
  */
 function bca_responsive_set_images_sizes($sizes, $size)
 {
-	if (is_single() && !$sizes && $size == 'medium') {
+	if (!$sizes && $size == 'medium') {
 		$sizes = $sizes . '(max-width:480px) thumbnail';
 	}
+
 	return $sizes;
 }
 add_filter('bca_responsive_images_sizes', 'bca_responsive_set_images_sizes', 10, 2);
