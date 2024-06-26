@@ -36,9 +36,11 @@ function bca_calculate_image_srcset($sources, $size_array, $image_src, $image_me
 {
 	global $post;
 
+	if (is_admin()) return $sources;
+
 	if (empty($image_meta) || !is_array($image_meta) || !isset($image_meta['sizes'])) return $sources;
 
-	if (!isset($post->thumbnails)) {
+	if (!is_null($post) && !isset($post->thumbnails)) {
 		$post->thumbnails = [];
 	}
 
@@ -55,47 +57,13 @@ function bca_calculate_image_srcset($sources, $size_array, $image_src, $image_me
 }
 add_filter('wp_calculate_image_srcset', 'bca_calculate_image_srcset', 10, 5);
 
-/**
- * Filters the post thumbnail HTML to use the Picture element.
- *
- * @param string $html              The post thumbnail HTML.
- * @param int    $post_id           The post ID.
- * @param int    $post_thumbnail_id The post thumbnail ID.
- * @param string $size              The post thumbnail size.
- * @param array  $attr              Array of attribute values for the post thumbnail.
- *
- * @return string Modified post thumbnail HTML.
- */
-function bca_responsive_images($html, $post_id, $post_thumbnail_id, $size, $attr)
+function bca_responsive_images_html($html, $attachment_id, $size, $attr)
 {
 	global $post;
 
-	if (is_admin()) return $html;
-
-	$defaults = ['content_types' => array('post'), 'in_content' => 0];
-	$options = get_option( 'bca_responsive_images_basics' );
-	$options = array_merge($defaults, !is_array($options) ? array() : $options);
-
-	if (!is_singular( $options['content_types'] )) return $html;
-
-	$html = bca_responsive_images_html( $html, $post_thumbnail_id, $size, $attr);
-
-	return $html;
-}
-add_filter('post_thumbnail_html', 'bca_responsive_images', 10, 5);
-
-function bca_responsive_images_html( $html, $attachment_id, $size, $attr)
-{
-	global $post;
-
-	$sizes = !isset($attr['sizes']) ? false : $attr['sizes'];
+	$sizes = wp_get_registered_image_subsizes();
+	$sizes = bca_responsive_sort_image_sizes($sizes);
 	$sizes = apply_filters('bca_responsive_images_sizes', $sizes, $size);
-
-	if (!$sizes || !is_string($sizes)) {
-		return $html;
-	}
-
-	$sizes = explode(',', $sizes);
 
 	if (!isset($post->thumbnails) || empty($post->thumbnails) || !isset($post->thumbnails[$attachment_id])) return $html;
 
@@ -103,9 +71,9 @@ function bca_responsive_images_html( $html, $attachment_id, $size, $attr)
 	$sources = [];
 
 	foreach ($sizes as $key => $size) {
-		$size = explode(' ', $size);
-		$condition = $size[0];
-		$thumbnail_size = $size[1];
+		$width = $size['width'];
+		$thumbnail_size = $key;
+		$condition = '(max-width:' . ($width + 100) . 'px)';
 
 		$image_src = isset($post_thumbnail[$thumbnail_size]) ? $post_thumbnail[$thumbnail_size]['url'] : false;
 
@@ -120,6 +88,56 @@ function bca_responsive_images_html( $html, $attachment_id, $size, $attr)
 
 	return $html;
 }
+
+/**
+ * Filters the post thumbnail HTML to use the Picture element.
+ *
+ * @param string $html              The post thumbnail HTML.
+ * @param int    $post_id           The post ID.
+ * @param int    $post_thumbnail_id The post thumbnail ID.
+ * @param string $size              The post thumbnail size.
+ * @param array  $attr              Array of attribute values for the post thumbnail.
+ *
+ * @return string Modified post thumbnail HTML.
+ */
+function bca_responsive_images($html, $post_id, $post_thumbnail_id, $size, $attr)
+{
+
+	if (is_admin()) return $html;
+
+	$defaults = ['content_types' => array('post'), 'in_content' => 0];
+	$options = get_option('bca_responsive_images_basics');
+	$options = array_merge($defaults, !is_array($options) ? array() : $options);
+
+	if (!is_singular($options['content_types'])) return $html;
+
+	$html = bca_responsive_images_html($html, $post_thumbnail_id, $size, $attr);
+
+	return $html;
+}
+add_filter('post_thumbnail_html', 'bca_responsive_images', 10, 5);
+
+
+function bca_responsive_images_block($block_content, $block)
+{
+	if (is_admin()) return $block_content;
+
+	$defaults = ['content_types' => array('post'), 'in_content' => 0];
+	$options = get_option('bca_responsive_images_basics');
+	$options = array_merge($defaults, !is_array($options) ? array() : $options);
+
+	if ($options['in_content'] == 0) return $block_content;
+
+	if ($block['blockName'] === 'core/image') {
+
+		$block_content = bca_responsive_get_picture_srcset($block_content, $block['attrs']['id']);
+	}
+
+	return $block_content;
+}
+
+add_filter('render_block', 'bca_responsive_images_block', 10, 2);
+
 /**
  * Filters the threshold for how many of the first content media elements to not lazy-load.
  *
@@ -138,19 +156,86 @@ function bca_omit_loading_attr_threshold($omit_threshold)
 add_filter('wp_omit_loading_attr_threshold', 'bca_omit_loading_attr_threshold');
 
 /**
- * Filters the responsive image sizes attribute.
+ * Filters the list of attachment image attributes.
  *
- * @param string $sizes Image sizes attribute.
- * @param string $size  The post thumbnail size.
+ * @since 2.8.0
  *
- * @return string Modified image sizes attribute.
+ * @param string[]     $attr       Array of attribute values for the image markup, keyed by attribute name.
+ *                                 See wp_get_attachment_image().
+ * @param WP_Post      $attachment Image attachment post.
+ * @param string|int[] $size       Requested image size. Can be any registered image size name, or
+ *                                 an array of width and height values in pixels (in that order).
  */
-function bca_responsive_set_images_sizes($sizes, $size)
+function bca_responsive_images_remove_srcset($attr): array
 {
-	if (!$sizes && $size == 'medium') {
-		$sizes = $sizes . '(max-width:480px) thumbnail';
+	if (is_admin()) return $attr;
+
+	unset($attr['srcset']);
+	unset($attr['sizes']);
+	return $attr;
+}
+add_filter('wp_get_attachment_image_attributes', 'bca_responsive_images_remove_srcset', 10, 3);
+
+
+function bca_responsive_sort_image_sizes($array)
+{
+	uasort($array, function ($a, $b) {
+		return $a['width'] <=> $b['width'];
+	});
+	return $array;
+}
+
+function bca_responsive_wrap_picture_tag($content)
+{
+	$pattern = '/(<img[^>]*\bsrcset\b[^>]*>|<img[^>]*>)/i';
+	$replacement = '$1';
+	return preg_replace($pattern, $replacement, $content);
+}
+
+function bca_responsive_images_parse_urls($input)
+{
+	// Split the input string by commas to get individual image URL and width pairs
+	$pairs = explode(',', $input);
+
+	$result = [];
+
+	// Loop through each pair
+	foreach ($pairs as $pair) {
+		// Trim any extra whitespace
+		$pair = trim($pair);
+
+		// Use a regular expression to extract the URL and width
+		if (preg_match('/(https?:\/\/\S+)\s(\d+)w/', $pair, $matches)) {
+			$url = $matches[1];
+			$width = (int) $matches[2];
+
+			// Append the result array with an associative array containing the URL and width
+			$result[] = ['url' => $url, 'width' => $width];
+		}
 	}
 
-	return $sizes;
+	$result = bca_responsive_sort_image_sizes($result);
+
+	return $result;
 }
-add_filter('bca_responsive_images_sizes', 'bca_responsive_set_images_sizes', 10, 2);
+
+function bca_responsive_get_picture_srcset($html, $attachment_id)
+{
+	$sizes = wp_get_attachment_image_srcset($attachment_id);
+	$sizes = bca_responsive_images_parse_urls($sizes);
+
+	foreach ($sizes as $key => $size) {
+		$width = $size['width'];
+		$url = $size['url'];
+		$condition = '(max-width:' . ($width + 100) . 'px)';
+		$sources[] = '<source media="' . $condition . '" srcset="' . $url . '">';
+	}
+
+	if (!empty($sources)) {
+		$pattern = '/(<img[^>]*\bsrcset\b[^>]*>|<img[^>]*>)/i';
+		$replacement = '<picture>' . implode("\n", $sources) . '$1' . '</picture>';
+		$html = preg_replace($pattern, $replacement, $html);
+	}
+
+	return $html;
+}
