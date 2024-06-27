@@ -21,73 +21,6 @@ if (!defined('ABSPATH')) {
 
 include __DIR__  . '/includes/settings-api.php';
 include __DIR__  . '/includes/settings.php';
-/**
- * Filters the image sources for responsive images.
- *
- * @param array  $sources       One or more arrays of source data to include in the 'srcset' attribute.
- * @param array  $size_array    Array of width and height values in pixels (in that order).
- * @param string $image_src     The 'src' of the image.
- * @param array  $image_meta    The image meta data as returned by 'wp_get_attachment_metadata()'.
- * @param int    $attachment_id Image attachment ID.
- *
- * @return array Modified array of sources.
- */
-function bca_calculate_image_srcset($sources, $size_array, $image_src, $image_meta, $attachment_id)
-{
-	global $post;
-
-	if (is_admin()) return $sources;
-
-	if (empty($image_meta) || !is_array($image_meta) || !isset($image_meta['sizes'])) return $sources;
-
-	if (!is_null($post) && !isset($post->thumbnails)) {
-		$post->thumbnails = [];
-	}
-
-	foreach ($image_meta['sizes'] as $key => $image) {
-		$image_baseurl = str_replace(wp_basename($image_src), '', $image_src);
-		$post->thumbnails[$attachment_id][$key] = array(
-			'url'        => $image_baseurl . $image['file'],
-			'descriptor' => '',
-			'value'      => $key,
-		);
-	}
-
-	return $sources;
-}
-add_filter('wp_calculate_image_srcset', 'bca_calculate_image_srcset', 10, 5);
-
-function bca_responsive_images_html($html, $attachment_id, $size, $attr)
-{
-	global $post;
-
-	$sizes = wp_get_registered_image_subsizes();
-	$sizes = bca_responsive_sort_image_sizes($sizes);
-	$sizes = apply_filters('bca_responsive_images_sizes', $sizes, $size);
-
-	if (!isset($post->thumbnails) || empty($post->thumbnails) || !isset($post->thumbnails[$attachment_id])) return $html;
-
-	$post_thumbnail = $post->thumbnails[$attachment_id];
-	$sources = [];
-
-	foreach ($sizes as $key => $size) {
-		$width = $size['width'];
-		$thumbnail_size = $key;
-		$condition = '(max-width:' . ($width + 100) . 'px)';
-
-		$image_src = isset($post_thumbnail[$thumbnail_size]) ? $post_thumbnail[$thumbnail_size]['url'] : false;
-
-		if ($image_src) {
-			$sources[] = '<source data-size="' . $thumbnail_size . '" media="' . $condition . '" srcset="' . $image_src . '">';
-		}
-	}
-
-	if (!empty($sources)) {
-		$html = '<picture>' . implode("\n", $sources) . $html . '</picture>';
-	}
-
-	return $html;
-}
 
 /**
  * Filters the post thumbnail HTML to use the Picture element.
@@ -111,7 +44,7 @@ function bca_responsive_images($html, $post_id, $post_thumbnail_id, $size, $attr
 
 	if (!is_singular($options['content_types'])) return $html;
 
-	$html = bca_responsive_images_html($html, $post_thumbnail_id, $size, $attr);
+	$html = bca_responsive_get_picture_srcset($html, $post_thumbnail_id);
 
 	return $html;
 }
