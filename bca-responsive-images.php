@@ -2,16 +2,18 @@
 
 /**
  * Plugin Name:       Blk Canvas - Responsive Images
- * Description:       Enhance your website's performance and user experience with responsive images! This plugin dynamically serves the most appropriate image sizes for mobile, tablet, and desktop devices, ensuring faster load times and optimized visual quality across all screen sizes.
+ * Plugin URI:        https://github.com/blkcanvas/bca-responsive-images
+ * Description:       Automatically wrap featured images and core image blocks in responsive <picture> markup to serve the right size for every device.
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Version:           0.1.0
- * Author:            The WordPress Contributors
+ * Author:            Blk Canvas
+ * Author URI:        https://blkcanvas.com
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       bca-responsive-images
  *
- * @package           create-block
+ * @package           bca-responsive-images
  */
 
 // Exit if accessed directly.
